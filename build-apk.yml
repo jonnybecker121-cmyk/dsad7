@@ -1,0 +1,66 @@
+name: Android APK bauen
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Abhängigkeiten installieren
+        run: npm install
+
+      - name: Parser-Tests
+        run: npm test
+
+      - name: Web-App bauen
+        env:
+          # Optional: unter Settings → Secrets and variables → Actions → Variables anlegen.
+          # Ohne diese Werte fragt die App beim ersten Start nach URL und Key.
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Android-Projekt erzeugen
+        run: |
+          npx cap add android
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          # Mikrofon + Sichtbarkeit des Spracherkennungs-Dienstes (Android 11+)
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <queries>\n        <intent>\n            <action android:name="android.speech.RecognitionService" />\n        </intent>\n    </queries>\n</manifest>#' "$MANIFEST"
+          npx cap sync android
+
+      - name: APK bauen
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: APK umbenennen
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk sprachplaner.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sprachplaner-apk
+          path: sprachplaner.apk
+
+      - name: Release erstellen (bei Tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sprachplaner.apk

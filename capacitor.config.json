@@ -1,0 +1,6 @@
+{
+  "appId": "de.sprachplaner.app",
+  "appName": "Sprachplaner",
+  "webDir": "dist",
+  "backgroundColor": "#0f1220"
+}
